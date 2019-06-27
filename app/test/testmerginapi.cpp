@@ -218,7 +218,7 @@ void TestMerginApi::testUploadProject()
 
   QString projectName = TestMerginApi::TEST_PROJECT_NAME;
   QString projectNamespace = mUsername;
-  std::shared_ptr<MerginProject> project = prepareTestProject();
+  std::shared_ptr<MerginProject> project = prepareUploadTestProject();
 
   QDateTime serverT0 = project->serverUpdated;
   mApi->uploadProject( projectNamespace, projectName );
@@ -257,9 +257,8 @@ void TestMerginApi::testPushChangesOfProject()
 
   QString projectName = TestMerginApi::TEST_PROJECT_NAME;
   QString projectNamespace = mUsername;
-  std::shared_ptr<MerginProject> project = prepareTestProject();
+  std::shared_ptr<MerginProject> project = prepareUploadTestProject();
 
-  QDateTime serverT0 = project->serverUpdated;
   mApi->uploadProject( projectNamespace, projectName );
   QSignalSpy spy( mApi, SIGNAL( syncProjectFinished( QString, QString, bool ) ) );
   QVERIFY( spy.wait( LONG_REPLY ) );
@@ -268,7 +267,7 @@ void TestMerginApi::testPushChangesOfProject()
   ProjectList projects = getProjectList();
   QVERIFY( hasProject( projectNamespace, projectName, projects ) );
   project = mApi->getProject( MerginApi::getFullProjectName( projectNamespace, projectName ) );
-  QDateTime serverT1 = project->serverUpdated;
+  QDateTime serverT0 = project->serverUpdated;
 
   // Update file
   QFile file( mProjectModel->dataDir() + projectName + "/project.qgs" );
@@ -289,8 +288,8 @@ void TestMerginApi::testPushChangesOfProject()
   projects = getProjectList();
   QVERIFY( hasProject( projectNamespace, projectName, projects ) );
   project = mApi->getProject( MerginApi::getFullProjectName( projectNamespace, projectName ) );
-  QDateTime serverT2 = project->serverUpdated;
-  QVERIFY( serverT1 < serverT2 );
+  QDateTime serverT1 = project->serverUpdated;
+  QVERIFY( serverT0 < serverT1 );
 
   qDebug() << "TestMerginApi::testPushChangesOfProject PASSED";
   passedTests++;
@@ -345,7 +344,7 @@ void TestMerginApi::initTestProject()
   qDebug() << "TestMerginApi::initTestProject DONE";
 }
 
-std::shared_ptr<MerginProject> TestMerginApi::prepareTestProject()
+std::shared_ptr<MerginProject> TestMerginApi::prepareUploadTestProject()
 {
   // Create a project
   QString projectName = TestMerginApi::TEST_PROJECT_NAME;
@@ -355,7 +354,7 @@ std::shared_ptr<MerginProject> TestMerginApi::prepareTestProject()
   std::shared_ptr<MerginProject> project = mApi->getProject( MerginApi::getFullProjectName( projectNamespace, projectName ) );
   if ( project->clientUpdated < project->serverUpdated && project->serverUpdated > project->lastSyncClient.toUTC() )
   {
-    // Fake same version on client of what is on the server
+    // Fake version to the latest version, so any download before upload will be omitted
     project->clientUpdated = project->serverUpdated;
     project->projectDir = mProjectModel->dataDir() + projectName;
   }

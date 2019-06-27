@@ -48,7 +48,7 @@ class TestMerginApi: public QObject
     ProjectList getProjectList();
     bool hasProject( QString projectNamespace, QString projectName, ProjectList projects );
     void initTestProject();
-    std::shared_ptr<MerginProject> prepareTestProject();
+    std::shared_ptr<MerginProject> prepareUploadTestProject();
     void deleteTestProject();
     void copyTestProject();
     QString testDataPath();
