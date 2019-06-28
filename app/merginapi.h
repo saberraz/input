@@ -35,7 +35,8 @@ struct MerginProject
   QString projectDir;
   QStringList tags;
   QList<MerginFile> files;
-  QString version;
+  QString localVersion;
+  QString serverVersion;
   QDateTime clientUpdated; // client's version of project files
   QDateTime serverUpdated; // available latest version of project files on server
   QDateTime lastSyncClient; // local datetime of download/upload/update project
@@ -256,7 +257,7 @@ class MerginApi: public QObject
     * \param lastSync Timestamp of last successfull sync with a server
     * \param lastMod Timestamp of last modification on local copy of the project
     */
-    ProjectStatus getProjectStatus( std::shared_ptr<MerginProject> project, const QDateTime &lastMod );
+    ProjectStatus getProjectStatus( std::shared_ptr<MerginProject> project, const QDateTime &lastModified );
     QDateTime getLastModifiedFileDateTime( const QString &path );
     int getProjectFilesCount( const QString &path );
     bool isInIgnore( const QFileInfo &info );

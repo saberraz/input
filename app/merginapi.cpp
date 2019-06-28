@@ -402,11 +402,12 @@ ProjectList MerginApi::updateMerginProjectList( const ProjectList &serverProject
     QString fullProjectName = getFullProjectName( project->projectNamespace, project->name );
     if ( downloadedProjects.contains( fullProjectName ) )
     {
-      project->projectDir = downloadedProjects.value( fullProjectName ).get()->projectDir;
-      QDateTime localUpdate = downloadedProjects.value( fullProjectName ).get()->clientUpdated.toUTC();
-      project->lastSyncClient = downloadedProjects.value( fullProjectName ).get()->lastSyncClient.toUTC();
+      project->projectDir = downloadedProjects.value( fullProjectName )->projectDir;
+      QDateTime localUpdate = downloadedProjects.value( fullProjectName )->clientUpdated.toUTC();
+      project->lastSyncClient = downloadedProjects.value( fullProjectName )->lastSyncClient.toUTC();
       QDateTime lastModified = getLastModifiedFileDateTime( project->projectDir );
       project->clientUpdated = localUpdate;
+      project->localVersion = downloadedProjects.value( fullProjectName )->localVersion;
       project->status = getProjectStatus( project, lastModified );
     }
   }
@@ -579,6 +580,8 @@ void MerginApi::clearProject( std::shared_ptr<MerginProject> project )
   project->lastSyncClient = QDateTime();
   project->clientUpdated = QDateTime();
   project->serverUpdated = QDateTime();
+  project->localVersion.clear();
+  project->serverVersion.clear();
   project->projectDir.clear();
   emit merginProjectsChanged();
 }
@@ -1406,7 +1409,7 @@ QPair<QHash<QString, QList<MerginFile>>, QString> MerginApi::parseAndCompareProj
         // Save data from server to update metadata after successful request
         MerginProject project;
         project.name = docObj.value( QStringLiteral( "name" ) ).toString();
-        project.version = docObj.value( QStringLiteral( "version" ) ).toString();
+        project.localVersion = docObj.value( QStringLiteral( "version" ) ).toString();
         project.files = projectFiles;
         mTempMerginProjects.insert( projectNamespace + "/" + projectName, project );
       }
@@ -1442,6 +1445,8 @@ ProjectList MerginApi::parseListProjectsMetadata( const QByteArray &data )
       MerginProject p;
       p.name = projectMap.value( QStringLiteral( "name" ) ).toString();
       p.projectNamespace = projectMap.value( QStringLiteral( "namespace" ) ).toString();
+      // function used for parsing server data, therefore version == serverVersion
+      p.serverVersion = projectMap.value( QStringLiteral( "version" ) ).toString();
       p.creator = projectMap.value( QStringLiteral( "creator" ) ).toInt();
 
       QJsonValue meta = projectMap.value( QStringLiteral( "meta" ) );
@@ -1512,7 +1517,8 @@ MerginProject MerginApi::readProjectMetadata( const QByteArray &data )
   p.projectNamespace = projectMap.value( QStringLiteral( "namespace" ) ).toString();
   p.clientUpdated = QDateTime::fromString( projectMap.value( QStringLiteral( "clientUpdated" ) ).toString(), Qt::ISODateWithMs ).toUTC();
   p.lastSyncClient = QDateTime::fromString( projectMap.value( QStringLiteral( "lastSync" ) ).toString(), Qt::ISODateWithMs ).toUTC();
-  p.version = projectMap.value( QStringLiteral( "version" ) ).toString();
+  p.localVersion = projectMap.value( QStringLiteral( "localVersion" ) ).toString();
+  p.serverVersion = projectMap.value( QStringLiteral( "serverVersion" ) ).toString();
 
   QList<MerginFile> projectFiles;
   auto it = projectMap.constFind( QStringLiteral( "files" ) );
@@ -1548,7 +1554,8 @@ QJsonDocument MerginApi::createProjectMetadataJson( std::shared_ptr<MerginProjec
   projectMap.insert( QStringLiteral( "lastSync" ), project->lastSyncClient.toString( Qt::ISODateWithMs ) );
   projectMap.insert( QStringLiteral( "name" ), project->name );
   projectMap.insert( QStringLiteral( "namespace" ), project->projectNamespace );
-  projectMap.insert( QStringLiteral( "version" ), project->version );
+  projectMap.insert( QStringLiteral( "localVersion" ), project->localVersion );
+  projectMap.insert( QStringLiteral( "serverVersion" ), project->serverVersion );
 
   QJsonArray filesArray;
   for ( MerginFile file : project->files )
@@ -1594,7 +1601,8 @@ void MerginApi::updateProjectMetadata( const QString &projectDir, const QString 
       project->projectDir = projectDir;
     project->lastSyncClient = QDateTime::currentDateTime().toUTC();
     project->files = tempProjectData.files;
-    project->version = tempProjectData.version;
+    project->localVersion = tempProjectData.localVersion;
+    project->serverVersion = tempProjectData.serverVersion;
 
     QJsonDocument doc = createProjectMetadataJson( project );
     writeData( doc.toJson(), projectDir + "/" + MerginApi::sMetadataFile );
@@ -1716,10 +1724,11 @@ void MerginApi::createEmptyFile( const QString &path )
   file.close();
 }
 
+// TODO use project_.version instead ofg localVersion
 ProjectStatus MerginApi::getProjectStatus( std::shared_ptr<MerginProject> project, const QDateTime &lastModified )
 {
   // There was no sync yet
-  if ( !project->clientUpdated.isValid() )
+  if ( project->localVersion.isEmpty() )
   {
     return ProjectStatus::NoVersion;
   }
@@ -1732,7 +1741,7 @@ ProjectStatus MerginApi::getProjectStatus( std::shared_ptr<MerginProject> projec
   }
 
   // Version is lower than latest one, last sync also before updated
-  if ( project->clientUpdated < project->serverUpdated && project->serverUpdated > project->lastSyncClient )
+  if ( project->localVersion < project->serverVersion )
   {
     return ProjectStatus::OutOfDate;
   }
